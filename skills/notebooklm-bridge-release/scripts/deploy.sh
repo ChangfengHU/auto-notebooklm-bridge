@@ -19,7 +19,12 @@ mkdir -p "$STATE_DIR"
 MACHINE_ID="$("$ROOT_DIR/scripts/machine-id.sh")"
 echo "MACHINE_ID=$MACHINE_ID"
 
-"$ROOT_DIR/scripts/install-notebooklm.sh"
+if ! "$ROOT_DIR/scripts/install-notebooklm.sh"; then
+  echo "NotebookLM CLI setup is incomplete." >&2
+  echo "If Playwright Chromium is missing, run the command printed above and then rerun:" >&2
+  echo "  $SKILL_DIR/scripts/deploy.sh" >&2
+  exit 1
+fi
 
 if [[ "$SKIP_LOGIN" != "1" ]]; then
   set +e
@@ -60,6 +65,8 @@ if ! curl -fsS "$PUBLIC_URL/health" >/dev/null 2>&1; then
   echo "Local bridge is still running. Check tunnel logs:" >&2
   echo "  $DOMAIN_LOG" >&2
   echo "  $HOME/.tunneling/machine-agent/agent.log" >&2
+  echo "If domain.log contains a command for wss://domain-gateway.vyibc.com, run that command and rerun deploy with --skip-login." >&2
+  grep -E "domain-gateway\.vyibc\.com|wss://" "$DOMAIN_LOG" 2>/dev/null >&2 || true
   exit 1
 fi
 

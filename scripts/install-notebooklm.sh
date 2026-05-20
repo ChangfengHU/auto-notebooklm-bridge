@@ -59,6 +59,25 @@ fi
 "$VENV_PY" -m pip install -U pip
 "$VENV_PY" -m pip install "notebooklm-py==0.4.1"
 
+DRY_RUN="$("$VENV_PY" -m playwright install --dry-run chromium 2>/dev/null || true)"
+CHROMIUM_DIR="$(printf '%s\n' "$DRY_RUN" | awk '
+  /Chrome for Testing/ { seen=1 }
+  seen && /Install location:/ {
+    sub(/^.*Install location:[[:space:]]*/, "")
+    print
+    exit
+  }
+')"
+
+if [[ -n "$CHROMIUM_DIR" && ! -d "$CHROMIUM_DIR" ]]; then
+  echo "Playwright Chromium is required for notebooklm login, but it is not installed yet." >&2
+  echo "Run this once, then rerun the deploy skill:" >&2
+  echo "  $VENV_PY -m playwright install chromium" >&2
+  printf '%s\n' "$DRY_RUN" > "$STATE_DIR/playwright-chromium-download.txt"
+  echo "Download details were written to: $STATE_DIR/playwright-chromium-download.txt" >&2
+  exit 1
+fi
+
 {
   echo "PATH=$VENV_BIN:\$PATH"
   echo "NOTEBOOKLM_BIN=$NOTEBOOKLM_BIN"

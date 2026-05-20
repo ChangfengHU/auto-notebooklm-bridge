@@ -16,6 +16,15 @@ fi
 
 mkdir -p "$STATE_DIR"
 
+if command -v pkill >/dev/null 2>&1; then
+  pkill -f ".tunneling/machine-agent" 2>/dev/null || true
+  pkill -f "machine-agent" 2>/dev/null || true
+fi
+
+if command -v taskkill >/dev/null 2>&1; then
+  taskkill //F //IM machine-agent.exe >/dev/null 2>&1 || true
+fi
+
 if [[ ! -x "$ROOT_DIR/vendor/auto-domain/run.sh" && -x "$HOME/.codex/skills/auto-domain/scripts/run.sh" ]]; then
   AUTO_DOMAIN="$HOME/.codex/skills/auto-domain/scripts/run.sh"
 else
