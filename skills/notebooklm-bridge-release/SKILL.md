@@ -12,7 +12,7 @@ Use this skill on a producer machine. It prepares that machine to serve Notebook
 The fixed install command for this producer skill is:
 
 ```bash
-bash <(curl -fsSL https://skill.vyibc.com/install-notebooklm-bridge-release.sh)
+bash <(curl -fsSL https://skill.vyibc.com/install-notebooklm-bridge-release.sh?v=$(date +%s))
 ```
 
 ## Artifact Path
@@ -76,4 +76,3 @@ MACHINE_ID=...
 PUBLIC_URL=...
 CONSUMER_INSTALL_COMMAND=...
 ```
-

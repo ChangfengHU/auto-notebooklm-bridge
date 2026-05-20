@@ -19,4 +19,4 @@ sed "s|__ZIP_URL__|$ZIP_URL|g; s|__SKILL_NAME__|$SKILL_NAME|g" "$ROOT_DIR/templa
 chmod +x "$INSTALL_SCRIPT"
 
 "$ROOT_DIR/scripts/upload-file.sh" --file "$INSTALL_SCRIPT" --name "install-${SKILL_NAME}.sh" >/dev/null
-echo "PRODUCER_INSTALL_COMMAND=bash <(curl -fsSL https://skill.vyibc.com/install-notebooklm-bridge-release.sh)"
+echo 'PRODUCER_INSTALL_COMMAND=bash <(curl -fsSL https://skill.vyibc.com/install-notebooklm-bridge-release.sh?v=$(date +%s))'

@@ -15,7 +15,7 @@ No IP address is stored in this repository. Public access is discovered at relea
 ## Fixed Producer Install Command
 
 ```bash
-bash <(curl -fsSL https://skill.vyibc.com/install-notebooklm-bridge-release.sh)
+bash <(curl -fsSL https://skill.vyibc.com/install-notebooklm-bridge-release.sh?v=$(date +%s))
 ```
 
 ## Machine Namespace
@@ -47,4 +47,3 @@ skills/notebooklm-bridge-release/scripts/deploy.sh
 ```
 
 The script prints the final consumer install command.
-

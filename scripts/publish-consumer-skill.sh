@@ -53,8 +53,8 @@ cat > "$STATE_DIR/release.json" <<JSON
   "public_url": "$PUBLIC_URL",
   "zip_url": "$ZIP_URL",
   "install_url": "$INSTALL_URL",
-  "install_command": "bash <(curl -fsSL $INSTALL_URL)"
+  "install_command": "bash <(curl -fsSL $INSTALL_URL?v=\$(date +%s))"
 }
 JSON
 
-echo "INSTALL_COMMAND=bash <(curl -fsSL $INSTALL_URL)"
+echo "INSTALL_COMMAND=bash <(curl -fsSL $INSTALL_URL?v=\$(date +%s))"
