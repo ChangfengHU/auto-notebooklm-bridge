@@ -11,10 +11,10 @@
 在需要部署 NotebookLM Bridge 的机器上执行：
 
 ```bash
-bash <(curl -fsSL https://skill.vyibc.com/install-notebooklm-bridge-release.sh?v=$(date +%s))
+bash <(curl -fsSL "https://skill.vyibc.com/install-notebooklm-bridge-release.sh?v=$(date +%s)")
 ```
 
-`?v=$(date +%s)` 用来绕过 CDN 或本机缓存，确保拿到最新安装脚本。
+`?v=$(date +%s)` 用来绕过 CDN 或本机缓存，确保拿到最新安装脚本。URL 必须加双引号，避免 zsh 把 `?` 当作通配符。
 
 执行后会让你选择安装到哪个 AI 工具：
 
@@ -70,13 +70,21 @@ notebooklm login
 
 它使用 Playwright 管理的 Chromium 浏览器，不是系统默认浏览器。
 
-如果机器上还没有 Playwright Chromium，部署脚本会停下来并提示你执行类似命令：
+如果机器上还没有 Playwright Chromium，部署脚本会提示你可以执行类似命令：
 
 ```bash
 ~/.venvs/notebooklm-py/bin/python -m playwright install chromium
 ```
 
-下载完成后，重新让 agent 运行 deploy 即可。
+下载完成后，重新让 agent 运行 deploy 即可。当前脚本不会强制自动下载 Chromium。
+
+如果你在 macOS 或 Windows 已经用 Chrome 登录过 Google，也可以让部署脚本走备用登录路径：
+
+```bash
+notebooklm login --browser-cookies chrome
+```
+
+这个方式默认读取 Chrome 的 Default Profile。它不会自动扫描所有 Chrome Profile；如果你有多个 Google 账号，需要确认 Default Profile 对应的账号就是你想给 Bridge 使用的 NotebookLM 账号。
 
 Linux 服务器如果没有桌面环境，需要通过 VNC 完成浏览器登录；macOS 和 Windows 通常会直接弹出本机浏览器窗口。
 
@@ -122,12 +130,12 @@ notebooklm-bridge/nbb-7f3c2a91/release/notebooklm-bridge.zip
 producer 部署成功后，会输出消费者安装命令，类似：
 
 ```bash
-bash <(curl -fsSL https://skill.vyibc.com/notebooklm-bridge/<machine-id>/release/install-notebooklm-bridge.sh?v=$(date +%s))
+bash <(curl -fsSL "https://skill.vyibc.com/notebooklm-bridge/<machine-id>/release/install-notebooklm-bridge.sh?v=$(date +%s)")
 ```
 
 把这个命令发给别人，对方安装后就能通过你的公网 Bridge 调用 NotebookLM。
 
-消费者机器不需要自己登录 NotebookLM，也不需要本地部署 Bridge；登录和 Bridge 都在生产者机器上。
+消费者机器不需要自己登录 NotebookLM，也不需要本地部署 Bridge；登录和 Bridge 都在生产者机器上。消费者 skill 包里会内置 `bridge.env`，包含公网 URL 和 `HERMES_WEBHOOK_TOKEN`，所以消费端安装后不需要再手动猜 token。
 
 ## 常用命令
 
@@ -168,3 +176,14 @@ curl http://127.0.0.1:18800/health
 - 发布 consumer skill
 
 最终分享给别人使用的是 producer 部署成功后生成的 consumer skill 安装命令。
+
+## 部署成功判据
+
+部署脚本不会只依赖 `/health`。完整成功需要同时满足：
+
+- NotebookLM Auth 检查通过
+- 本地 Bridge `/run` 可以带 token 执行 `list --json`
+- 公网 Bridge `/run` 可以带 token 执行 `list --json`
+- consumer skill 发布成功
+
+如果使用 `--skip-login`，脚本也会先检查 NotebookLM Auth；Auth 不通过时不会继续发布。

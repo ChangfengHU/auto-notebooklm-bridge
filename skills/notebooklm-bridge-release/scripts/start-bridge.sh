@@ -7,14 +7,31 @@ PORT="${NOTEBOOKLM_BRIDGE_PORT:-18800}"
 
 mkdir -p "$STATE_DIR"
 
-if [[ -f "$STATE_DIR/env" ]]; then
+ENV_FILE="$STATE_DIR/env"
+upsert_env() {
+  local key="$1"
+  local value="$2"
+  touch "$ENV_FILE"
+  if grep -q "^${key}=" "$ENV_FILE"; then
+    awk -v key="$key" -v value="$value" '
+      index($0, key "=") == 1 { print key "=" value; next }
+      { print }
+    ' "$ENV_FILE" > "$ENV_FILE.tmp"
+    mv "$ENV_FILE.tmp" "$ENV_FILE"
+  else
+    printf '%s=%s\n' "$key" "$value" >> "$ENV_FILE"
+  fi
+}
+
+if [[ -f "$ENV_FILE" ]]; then
   set -a
   # shellcheck disable=SC1090
-  source "$STATE_DIR/env"
+  source "$ENV_FILE"
   set +a
 fi
 
 cd "$ROOT_DIR"
+NOTEBOOKLM_BIN="${NOTEBOOKLM_BIN:-notebooklm}"
 PYTHON_BIN="${NOTEBOOKLM_BIN%/notebooklm}"
 PYTHON_BIN="${PYTHON_BIN%/notebooklm.exe}"
 if [[ -x "$PYTHON_BIN/python" ]]; then
@@ -33,16 +50,25 @@ import secrets
 print(secrets.token_urlsafe(32))
 PY
 )"
-  {
-    echo "NOTEBOOKLM_BRIDGE_TOKEN=$TOKEN"
-    echo "HERMES_WEBHOOK_TOKEN=$TOKEN"
-  } >> "$STATE_DIR/env"
+  export NOTEBOOKLM_BRIDGE_TOKEN="$TOKEN"
+  export HERMES_WEBHOOK_TOKEN="$TOKEN"
+else
+  TOKEN="${NOTEBOOKLM_BRIDGE_TOKEN:-${HERMES_WEBHOOK_TOKEN:-}}"
   export NOTEBOOKLM_BRIDGE_TOKEN="$TOKEN"
   export HERMES_WEBHOOK_TOKEN="$TOKEN"
 fi
+upsert_env "NOTEBOOKLM_BRIDGE_TOKEN" "$TOKEN"
+upsert_env "HERMES_WEBHOOK_TOKEN" "$TOKEN"
 
 LOG_FILE="$STATE_DIR/bridge.log"
 PID_FILE="$STATE_DIR/bridge.pid"
+if [[ -f "$PID_FILE" ]]; then
+  OLD_PID="$(cat "$PID_FILE" 2>/dev/null || true)"
+  if [[ -n "$OLD_PID" ]] && kill -0 "$OLD_PID" 2>/dev/null; then
+    kill "$OLD_PID" 2>/dev/null || true
+    sleep 1
+  fi
+fi
 NOTEBOOKLM_BRIDGE_PORT="$PORT" PYTHON="$BRIDGE_PYTHON" nohup "$ROOT_DIR/bridge/start.sh" >"$LOG_FILE" 2>&1 &
 echo $! > "$PID_FILE"
 

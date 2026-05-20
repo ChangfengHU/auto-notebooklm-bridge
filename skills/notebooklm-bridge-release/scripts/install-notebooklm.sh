@@ -7,15 +7,30 @@ ENV_FILE="$STATE_DIR/env"
 
 mkdir -p "$STATE_DIR"
 
+upsert_env() {
+  local key="$1"
+  local value="$2"
+  touch "$ENV_FILE"
+  if grep -q "^${key}=" "$ENV_FILE"; then
+    awk -v key="$key" -v value="$value" '
+      index($0, key "=") == 1 { print key "=" value; next }
+      { print }
+    ' "$ENV_FILE" > "$ENV_FILE.tmp"
+    mv "$ENV_FILE.tmp" "$ENV_FILE"
+  else
+    printf '%s=%s\n' "$key" "$value" >> "$ENV_FILE"
+  fi
+}
+
 if [[ -x "$VENV_DIR/bin/notebooklm" ]]; then
-  echo "PATH=$VENV_DIR/bin:\$PATH" > "$ENV_FILE"
-  echo "NOTEBOOKLM_BIN=$VENV_DIR/bin/notebooklm" >> "$ENV_FILE"
+  upsert_env "PATH" "$VENV_DIR/bin:\$PATH"
+  upsert_env "NOTEBOOKLM_BIN" "$VENV_DIR/bin/notebooklm"
   exit 0
 fi
 
 if [[ -x "$VENV_DIR/Scripts/notebooklm.exe" ]]; then
-  echo "PATH=$VENV_DIR/Scripts:\$PATH" > "$ENV_FILE"
-  echo "NOTEBOOKLM_BIN=$VENV_DIR/Scripts/notebooklm.exe" >> "$ENV_FILE"
+  upsert_env "PATH" "$VENV_DIR/Scripts:\$PATH"
+  upsert_env "NOTEBOOKLM_BIN" "$VENV_DIR/Scripts/notebooklm.exe"
   exit 0
 fi
 
@@ -70,17 +85,16 @@ CHROMIUM_DIR="$(printf '%s\n' "$DRY_RUN" | awk '
 ')"
 
 if [[ -n "$CHROMIUM_DIR" && ! -d "$CHROMIUM_DIR" ]]; then
-  echo "Playwright Chromium is required for notebooklm login, but it is not installed yet." >&2
-  echo "Run this once, then rerun the deploy skill:" >&2
+  echo "Playwright Chromium is not installed." >&2
+  echo "Normal 'notebooklm login' may fail until you run:" >&2
   echo "  $VENV_PY -m playwright install chromium" >&2
+  echo "Deploy will continue because macOS/Windows can often login with Chrome cookies:" >&2
+  echo "  notebooklm login --browser-cookies chrome" >&2
   printf '%s\n' "$DRY_RUN" > "$STATE_DIR/playwright-chromium-download.txt"
   echo "Download details were written to: $STATE_DIR/playwright-chromium-download.txt" >&2
-  exit 1
 fi
 
-{
-  echo "PATH=$VENV_BIN:\$PATH"
-  echo "NOTEBOOKLM_BIN=$NOTEBOOKLM_BIN"
-} > "$ENV_FILE"
+upsert_env "PATH" "$VENV_BIN:\$PATH"
+upsert_env "NOTEBOOKLM_BIN" "$NOTEBOOKLM_BIN"
 
 echo "NOTEBOOKLM_BIN=$NOTEBOOKLM_BIN"

@@ -18,6 +18,19 @@ if [[ -z "$PUBLIC_URL" ]]; then
   exit 1
 fi
 
+if [[ -f "$STATE_DIR/env" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "$STATE_DIR/env"
+  set +a
+fi
+
+BRIDGE_TOKEN="${HERMES_WEBHOOK_TOKEN:-${NOTEBOOKLM_BRIDGE_TOKEN:-}}"
+if [[ -z "$BRIDGE_TOKEN" ]]; then
+  echo "missing HERMES_WEBHOOK_TOKEN or NOTEBOOKLM_BRIDGE_TOKEN in $STATE_DIR/env" >&2
+  exit 1
+fi
+
 WORK_DIR="$(mktemp -d /tmp/notebooklm-consumer-skill-XXXXXX)"
 trap 'rm -rf "$WORK_DIR"' EXIT
 SKILL_NAME="notebooklm-bridge"
@@ -30,7 +43,12 @@ else
   TEMPLATE="$ROOT_DIR/skills/notebooklm-bridge/SKILL.md"
 fi
 
-sed "s|__PUBLIC_URL__|$PUBLIC_URL|g" "$TEMPLATE" > "$SKILL_DIR/SKILL.md"
+sed "s|__PUBLIC_URL__|$PUBLIC_URL|g; s|__HERMES_WEBHOOK_TOKEN__|$BRIDGE_TOKEN|g" "$TEMPLATE" > "$SKILL_DIR/SKILL.md"
+cat > "$SKILL_DIR/bridge.env" <<ENV
+NOTEBOOKLM_BRIDGE_URL="$PUBLIC_URL"
+HERMES_WEBHOOK_TOKEN="$BRIDGE_TOKEN"
+NOTEBOOKLM_BRIDGE_TOKEN="$BRIDGE_TOKEN"
+ENV
 
 ZIP_FILE="$WORK_DIR/${SKILL_NAME}.zip"
 (cd "$WORK_DIR" && zip -qr "$ZIP_FILE" "$SKILL_NAME")
@@ -53,8 +71,8 @@ cat > "$STATE_DIR/release.json" <<JSON
   "public_url": "$PUBLIC_URL",
   "zip_url": "$ZIP_URL",
   "install_url": "$INSTALL_URL",
-  "install_command": "bash <(curl -fsSL $INSTALL_URL?v=\$(date +%s))"
+  "install_command": "bash <(curl -fsSL \\\"$INSTALL_URL?v=\$(date +%s)\\\")"
 }
 JSON
 
-echo "INSTALL_COMMAND=bash <(curl -fsSL $INSTALL_URL?v=\$(date +%s))"
+echo "INSTALL_COMMAND=bash <(curl -fsSL \"$INSTALL_URL?v=\$(date +%s)\")"

@@ -13,10 +13,20 @@ fi
 
 NOTEBOOKLM_CMD="${NOTEBOOKLM_BIN:-notebooklm}"
 
+run_login() {
+  if "$NOTEBOOKLM_CMD" login; then
+    return 0
+  fi
+
+  echo "Normal notebooklm login failed." >&2
+  echo "Trying Chrome cookie login: $NOTEBOOKLM_CMD login --browser-cookies chrome" >&2
+  "$NOTEBOOKLM_CMD" login --browser-cookies chrome
+}
+
 case "$OS_NAME" in
   Linux)
     if [[ -n "${DISPLAY:-}" ]]; then
-      "$NOTEBOOKLM_CMD" login
+      run_login
       exit 0
     fi
     echo "Linux headless mode detected."
@@ -25,12 +35,12 @@ case "$OS_NAME" in
     exit 2
     ;;
   Darwin)
-    "$NOTEBOOKLM_CMD" login
+    run_login
     ;;
   MINGW*|MSYS*|CYGWIN*)
-    "$NOTEBOOKLM_CMD" login
+    run_login
     ;;
   *)
-    "$NOTEBOOKLM_CMD" login
+    run_login
     ;;
 esac

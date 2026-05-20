@@ -12,7 +12,7 @@ Use this skill on a producer machine. It prepares that machine to serve Notebook
 The fixed install command for this producer skill is:
 
 ```bash
-bash <(curl -fsSL https://skill.vyibc.com/install-notebooklm-bridge-release.sh?v=$(date +%s))
+bash <(curl -fsSL "https://skill.vyibc.com/install-notebooklm-bridge-release.sh?v=$(date +%s)")
 ```
 
 ## Artifact Path
@@ -47,6 +47,8 @@ The script performs:
 6. publish the consumer `notebooklm-bridge` skill under the machine path
 7. print the consumer install command
 
+Deploy is considered successful only after NotebookLM auth passes and `/run` can execute `list --json` through both the local bridge and the public tunnel with the bridge token.
+
 ## Linux Headless
 
 If Linux has no `$DISPLAY`, run:
@@ -67,6 +69,8 @@ After login succeeds, rerun:
 __SKILL_DIR__/scripts/deploy.sh --skip-login
 ```
 
+`--skip-login` still requires existing NotebookLM auth to pass. It will not publish a consumer skill if auth is invalid.
+
 ## Output
 
 The final output contains:
@@ -74,5 +78,7 @@ The final output contains:
 ```text
 MACHINE_ID=...
 PUBLIC_URL=...
+AUTH_STATUS=pass
+BRIDGE_TOKEN_FILE=~/.notebooklm-bridge/env
 CONSUMER_INSTALL_COMMAND=...
 ```
