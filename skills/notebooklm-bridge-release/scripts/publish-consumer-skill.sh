@@ -24,7 +24,13 @@ SKILL_NAME="notebooklm-bridge"
 SKILL_DIR="$WORK_DIR/$SKILL_NAME"
 mkdir -p "$SKILL_DIR"
 
-sed "s|__PUBLIC_URL__|$PUBLIC_URL|g" "$ROOT_DIR/skills/notebooklm-bridge/SKILL.md" > "$SKILL_DIR/SKILL.md"
+if [[ -f "$ROOT_DIR/templates/notebooklm-bridge.SKILL.md" ]]; then
+  TEMPLATE="$ROOT_DIR/templates/notebooklm-bridge.SKILL.md"
+else
+  TEMPLATE="$ROOT_DIR/skills/notebooklm-bridge/SKILL.md"
+fi
+
+sed "s|__PUBLIC_URL__|$PUBLIC_URL|g" "$TEMPLATE" > "$SKILL_DIR/SKILL.md"
 
 ZIP_FILE="$WORK_DIR/${SKILL_NAME}.zip"
 (cd "$WORK_DIR" && zip -qr "$ZIP_FILE" "$SKILL_NAME")
@@ -52,4 +58,3 @@ cat > "$STATE_DIR/release.json" <<JSON
 JSON
 
 echo "INSTALL_COMMAND=bash <(curl -fsSL $INSTALL_URL)"
-

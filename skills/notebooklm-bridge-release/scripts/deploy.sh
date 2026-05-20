@@ -55,6 +55,14 @@ if [[ -z "$PUBLIC_URL" ]]; then
   exit 1
 fi
 
+if ! curl -fsS "$PUBLIC_URL/health" >/dev/null 2>&1; then
+  echo "Public tunnel URL was allocated, but health check failed: $PUBLIC_URL/health" >&2
+  echo "Local bridge is still running. Check tunnel logs:" >&2
+  echo "  $DOMAIN_LOG" >&2
+  echo "  $HOME/.tunneling/machine-agent/agent.log" >&2
+  exit 1
+fi
+
 cat > "$STATE_DIR/domain-current.json" <<JSON
 {
   "machine_id": "$MACHINE_ID",
