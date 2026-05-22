@@ -7,7 +7,6 @@ PORT="${NOTEBOOKLM_BRIDGE_PORT:-18800}"
 MACHINE_ID="$("$ROOT_DIR/scripts/machine-id.sh")"
 DOMAIN_NAME="${NOTEBOOKLM_DOMAIN_NAME:-notebooklm-bridge-${MACHINE_ID}}"
 DOMAIN_LOG="$STATE_DIR/domain.log"
-PID_FILE="$STATE_DIR/domain.pid"
 FOREGROUND=0
 
 if [[ "${1:-}" == "--foreground" ]]; then
@@ -16,11 +15,11 @@ fi
 
 mkdir -p "$STATE_DIR"
 
+# 停掉旧的 tunneling 进程
 if command -v pkill >/dev/null 2>&1; then
   pkill -f ".tunneling/machine-agent" 2>/dev/null || true
   pkill -f "machine-agent" 2>/dev/null || true
 fi
-
 if command -v taskkill >/dev/null 2>&1; then
   taskkill //F //IM machine-agent.exe >/dev/null 2>&1 || true
 fi
@@ -41,7 +40,6 @@ if [[ "$FOREGROUND" == "1" ]]; then
   exit 0
 fi
 
-nohup "$AUTO_DOMAIN" "$PORT" "$DOMAIN_NAME" >"$DOMAIN_LOG" 2>&1 &
-echo $! > "$PID_FILE"
-echo "DOMAIN_PID=$(cat "$PID_FILE")"
-echo "DOMAIN_LOG=$DOMAIN_LOG"
+# 后台守护模式：等待隧道上线并打印公网 URL
+"$AUTO_DOMAIN" "$PORT" "$DOMAIN_NAME" --daemon
+
