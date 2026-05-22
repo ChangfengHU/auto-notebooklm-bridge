@@ -16,6 +16,50 @@ PORT="${NOTEBOOKLM_BRIDGE_PORT:-18800}"
 
 mkdir -p "$STATE_DIR"
 
+# ── Fix permissions on all scripts ───────────────────────────────────────────
+chmod +x "$ROOT_DIR/scripts/"*.sh \
+         "$ROOT_DIR/bridge/start.sh" \
+         "$ROOT_DIR/vendor/auto-domain/"*.sh 2>/dev/null || true
+
+# ── Load config.env (tokens) ─────────────────────────────────────────────────
+CONFIG_ENV="$ROOT_DIR/config.env"
+if [[ -f "$CONFIG_ENV" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "$CONFIG_ENV"
+  set +a
+fi
+
+# ── Check zip ────────────────────────────────────────────────────────────────
+if ! command -v zip >/dev/null 2>&1; then
+  echo "zip is required but not installed." >&2
+  echo "Run: sudo apt-get install -y zip" >&2
+  exit 1
+fi
+
+# ── Telegram helper ───────────────────────────────────────────────────────────
+tg_notify() {
+  local text="$1"
+  [[ -z "${TG_BOT_TOKEN:-}" || -z "${TG_CHAT_ID:-}" ]] && return 0
+  curl -fsS -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
+    -H "Content-Type: application/json" \
+    -d "{\"chat_id\":\"${TG_CHAT_ID}\",\"text\":$(python3 -c "import json,sys; print(json.dumps(sys.argv[1]))" "$text"),\"parse_mode\":\"HTML\"}" \
+    >/dev/null 2>&1 || true
+}
+
+tg_msg() {
+  local emoji="$1" title="$2"; shift 2
+  local now; now="$(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+  local msg="${emoji} <b>${title}</b>"$'\n'
+  while [[ $# -ge 2 ]]; do
+    msg+="   ${1}: <code>${2}</code>"$'\n'
+    shift 2
+  done
+  msg+="   Time: ${now}"
+  echo "$msg"
+}
+
+# ── Bridge env helpers ────────────────────────────────────────────────────────
 load_bridge_env() {
   if [[ -f "$STATE_DIR/env" ]]; then
     set -a
@@ -43,13 +87,15 @@ bridge_run_list_ok() {
     -d '{"args":["list","--json"]}' >/dev/null
 }
 
+# ── Deploy ────────────────────────────────────────────────────────────────────
 MACHINE_ID="$("$ROOT_DIR/scripts/machine-id.sh")"
 echo "MACHINE_ID=$MACHINE_ID"
 
+tg_notify "$(tg_msg '🚀' 'Bridge Deploy Started' 'Machine' "$MACHINE_ID" 'Mode' "${SKIP_LOGIN:+skip-login}${SKIP_LOGIN:-full}")"
+
 if ! "$ROOT_DIR/scripts/install-notebooklm.sh"; then
+  tg_notify "$(tg_msg '❌' 'Deploy Failed' 'Step' 'install-notebooklm' 'Machine' "$MACHINE_ID")"
   echo "NotebookLM CLI setup is incomplete." >&2
-  echo "If Playwright Chromium is missing, run the command printed above and then rerun:" >&2
-  echo "  $SKILL_DIR/scripts/deploy.sh" >&2
   exit 1
 fi
 load_bridge_env
@@ -65,21 +111,20 @@ if [[ "$SKIP_LOGIN" != "1" ]]; then
     exit 2
   fi
   if [[ "$LOGIN_STATUS" != "0" ]]; then
+    tg_notify "$(tg_msg '❌' 'Deploy Failed' 'Step' 'login' 'Machine' "$MACHINE_ID")"
     exit "$LOGIN_STATUS"
   fi
 else
   if ! notebooklm_auth_ok; then
+    tg_notify "$(tg_msg '❌' 'Deploy Failed' 'Step' 'auth-check' 'Machine' "$MACHINE_ID" 'Hint' 'Run without --skip-login')"
     echo "--skip-login was requested, but NotebookLM auth is not valid." >&2
-    echo "Run without --skip-login or login manually, then rerun deploy." >&2
     exit 1
   fi
 fi
 
 if ! notebooklm_auth_ok; then
+  tg_notify "$(tg_msg '❌' 'Deploy Failed' 'Step' 'auth-check-post-login' 'Machine' "$MACHINE_ID")"
   echo "NotebookLM auth check failed after login." >&2
-  echo "Try one of these commands, then rerun deploy:" >&2
-  echo "  ${NOTEBOOKLM_BIN:-notebooklm} login" >&2
-  echo "  ${NOTEBOOKLM_BIN:-notebooklm} login --browser-cookies chrome" >&2
   exit 1
 fi
 
@@ -87,8 +132,8 @@ fi
 load_bridge_env
 
 if ! bridge_run_list_ok "http://localhost:$PORT"; then
+  tg_notify "$(tg_msg '❌' 'Deploy Failed' 'Step' 'local-bridge-test' 'Machine' "$MACHINE_ID")"
   echo "Local bridge is running, but authenticated NotebookLM list test failed." >&2
-  echo "Check $STATE_DIR/bridge.log and NotebookLM login state." >&2
   exit 1
 fi
 
@@ -98,32 +143,25 @@ DOMAIN_LOG="$STATE_DIR/domain.log"
 PUBLIC_URL=""
 for _ in $(seq 1 60); do
   PUBLIC_URL="$(grep -Eo 'https://[^ ]+' "$DOMAIN_LOG" 2>/dev/null | head -1 || true)"
-  if [[ -n "$PUBLIC_URL" ]]; then
-    break
-  fi
+  [[ -n "$PUBLIC_URL" ]] && break
   sleep 2
 done
 
 if [[ -z "$PUBLIC_URL" ]]; then
+  tg_notify "$(tg_msg '❌' 'Deploy Failed' 'Step' 'auto-domain' 'Machine' "$MACHINE_ID" 'Log' "$DOMAIN_LOG")"
   echo "auto-domain did not print a public URL. Check $DOMAIN_LOG" >&2
   exit 1
 fi
 
 if ! curl -fsS "$PUBLIC_URL/health" >/dev/null 2>&1; then
-  echo "Public tunnel URL was allocated, but health check failed: $PUBLIC_URL/health" >&2
-  echo "Local bridge is still running. Check tunnel logs:" >&2
-  echo "  $DOMAIN_LOG" >&2
-  echo "  $HOME/.tunneling/machine-agent/agent.log" >&2
-  echo "If domain.log contains a command for wss://domain-gateway.vyibc.com, run that command and rerun deploy with --skip-login." >&2
-  grep -E "domain-gateway\.vyibc\.com|wss://" "$DOMAIN_LOG" 2>/dev/null >&2 || true
+  tg_notify "$(tg_msg '❌' 'Deploy Failed' 'Step' 'public-health-check' 'URL' "$PUBLIC_URL")"
+  echo "Public tunnel health check failed: $PUBLIC_URL/health" >&2
   exit 1
 fi
 
 if ! bridge_run_list_ok "$PUBLIC_URL"; then
-  echo "Public bridge is reachable, but token-protected NotebookLM list test failed: $PUBLIC_URL/run" >&2
-  echo "Check token in $STATE_DIR/env and tunnel logs:" >&2
-  echo "  $DOMAIN_LOG" >&2
-  echo "  $HOME/.tunneling/machine-agent/agent.log" >&2
+  tg_notify "$(tg_msg '❌' 'Deploy Failed' 'Step' 'public-bridge-test' 'URL' "$PUBLIC_URL")"
+  echo "Public bridge test failed: $PUBLIC_URL/run" >&2
   exit 1
 fi
 
@@ -142,7 +180,24 @@ RELEASE_OUTPUT="$("$ROOT_DIR/scripts/publish-consumer-skill.sh" --public-url "$P
 echo "$RELEASE_OUTPUT"
 INSTALL_COMMAND="$(printf '%s\n' "$RELEASE_OUTPUT" | sed -n 's/^INSTALL_COMMAND=//p')"
 
+BRIDGE_TOKEN="$(grep -E '^HERMES_WEBHOOK_TOKEN=' "$STATE_DIR/env" | cut -d= -f2)"
+
 echo "PUBLIC_URL=$PUBLIC_URL"
 echo "AUTH_STATUS=pass"
 echo "BRIDGE_TOKEN_FILE=$STATE_DIR/env"
 echo "CONSUMER_INSTALL_COMMAND=$INSTALL_COMMAND"
+
+# ── Self-test curl command ────────────────────────────────────────────────────
+echo ""
+echo "=== Self-test ==="
+echo "curl -s -X POST \"$PUBLIC_URL/run\" \\"
+echo "  -H \"X-Token: $BRIDGE_TOKEN\" \\"
+echo "  -H \"Content-Type: application/json\" \\"
+echo "  -d '{\"args\": [\"list\", \"--json\"]}'"
+
+# ── TG deploy success ─────────────────────────────────────────────────────────
+tg_notify "$(tg_msg '✅' 'Bridge Deploy Success' \
+  'Machine' "$MACHINE_ID" \
+  'URL' "$PUBLIC_URL" \
+  'Auth' 'pass' \
+  'Consumer' "$INSTALL_COMMAND")"

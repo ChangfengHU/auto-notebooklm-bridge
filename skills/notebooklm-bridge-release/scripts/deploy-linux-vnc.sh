@@ -2,7 +2,7 @@
 set -euo pipefail
 
 DISPLAY_ID="${NOTEBOOKLM_VNC_DISPLAY:-:99}"
-NOVNC_PORT="${NOTEBOOKLM_NOVNC_PORT:-1006}"
+NOVNC_PORT="${NOTEBOOKLM_NOVNC_PORT:-7080}"
 VNC_PORT="${NOTEBOOKLM_VNC_PORT:-5900}"
 
 if ! command -v Xvfb >/dev/null 2>&1 || ! command -v x11vnc >/dev/null 2>&1 || ! command -v websockify >/dev/null 2>&1; then
