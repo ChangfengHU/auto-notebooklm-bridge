@@ -100,6 +100,15 @@ if ! "$ROOT_DIR/scripts/install-notebooklm.sh"; then
 fi
 load_bridge_env
 
+# ── Try to restore auth from R2 (skips browser login on new machines) ─────────
+if [[ "$SKIP_LOGIN" != "1" ]]; then
+  if "$ROOT_DIR/scripts/download-auth.sh" 2>/dev/null && notebooklm_auth_ok; then
+    echo "Auth restored from R2 — skipping browser login."
+    tg_notify "$(tg_msg '🔑' 'Auth Restored from R2' 'Machine' "$MACHINE_ID" 'Hint' 'skip-login active')" || true
+    SKIP_LOGIN=1
+  fi
+fi
+
 if [[ "$SKIP_LOGIN" != "1" ]]; then
   set +e
   "$ROOT_DIR/scripts/login-notebooklm.sh"

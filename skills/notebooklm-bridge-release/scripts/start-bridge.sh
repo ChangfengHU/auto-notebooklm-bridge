@@ -76,3 +76,20 @@ sleep 2
 curl -fsS "http://localhost:$PORT/health" >/dev/null
 echo "BRIDGE_LOCAL_URL=http://localhost:$PORT"
 echo "BRIDGE_PID=$(cat "$PID_FILE")"
+
+# ── Background auth sync: upload valid storage_state.json to R2 every 30 min ──
+AUTH_SYNC_LOG="$STATE_DIR/auth-sync.log"
+AUTH_SYNC_PID="$STATE_DIR/auth-sync.pid"
+SYNC_SCRIPT="$ROOT_DIR/scripts/sync-auth.sh"
+if [[ -x "$SYNC_SCRIPT" ]]; then
+  (
+    while true; do
+      sleep 1800
+      "$SYNC_SCRIPT" >> "$AUTH_SYNC_LOG" 2>&1 || true
+    done
+  ) &
+  echo $! > "$AUTH_SYNC_PID"
+  # Run once immediately so R2 always has the latest auth on fresh deploy
+  "$SYNC_SCRIPT" >> "$AUTH_SYNC_LOG" 2>&1 || true
+  echo "AUTH_SYNC_PID=$(cat "$AUTH_SYNC_PID")"
+fi
