@@ -1,189 +1,170 @@
 # auto-notebooklm-bridge
 
-这是一个独立的 NotebookLM Bridge 生产者部署仓库。
+让你的 AI Agent（Claude / Cursor / Codex 等）直接调用 NotebookLM 的能力——创建笔记本、添加内容源、深度研究、生成脑图/报告/音频——无需手动打开浏览器。
 
-它解决的问题是：在任意一台部署机器上完成 NotebookLM 登录、本地 HTTP Bridge 启动、公网域名分配，然后自动发布一个“消费者 skill”，让其他人的 Cursor/Codex/Claude 等工具可以通过这个公网 Bridge 使用 NotebookLM 能力。
+---
 
-仓库里不会写死任何机器 IP。公网访问地址由部署机器运行时通过 auto-domain 自动获取。
+## 角色说明
 
-## 一键安装 Producer Skill
+| 角色 | 职责 |
+|------|------|
+| **生产者（Producer）** | 部署一台有 NotebookLM 登录态的机器，暴露公网 Bridge |
+| **消费者（Consumer）** | 安装消费者 skill，直接让 agent 说话调用 NotebookLM |
 
-在需要部署 NotebookLM Bridge 的机器上执行：
+消费者机器**不需要登录 NotebookLM**，也不需要部署任何服务。
+
+---
+
+## 生产者：部署 Bridge
+
+### 第一步：安装 Producer Skill
+
+在需要部署的机器上执行：
 
 ```bash
 bash <(curl -fsSL "https://skill.vyibc.com/install-notebooklm-bridge-release.sh?v=$(date +%s)")
 ```
 
-`?v=$(date +%s)` 用来绕过 CDN 或本机缓存，确保拿到最新安装脚本。URL 必须加双引号，避免 zsh 把 `?` 当作通配符。
+安装时选择你使用的 AI 工具（Cursor / Claude / Codex 等）。
 
-执行后会让你选择安装到哪个 AI 工具：
+### 第二步：让 Agent 执行部署
 
-```text
-1) Codex
-2) Cursor
-3) Claude
-4) Gemini
-5) Antigravity
-6) Copilot
-7) OpenClaw
-8) Agents
-9) Hermes
-10) All
+安装完成后，对你的 agent 说：
+
 ```
-
-比如安装到 Cursor，就选 `2`。
-
-## 安装后怎么用
-
-上面的命令只是安装 `notebooklm-bridge-release` 这个 producer skill，不是直接完成部署。
-
-安装完成后，在对应工具里对 agent 说：
-
-```text
 使用 notebooklm-bridge-release 部署 NotebookLM Bridge
 ```
 
-或者：
+部署流程自动完成：
+1. 安装 notebooklm CLI
+2. 引导登录 NotebookLM（首次需要浏览器授权，此后跨机器自动恢复）
+3. 启动本地 HTTP Bridge（端口 18800）
+4. 获取公网域名（auto-domain 自动分配）
+5. 发布消费者 skill，输出安装命令
 
-```text
-运行 notebooklm-bridge-release 的 deploy
-```
+### 第三步：把消费者命令发给别人
 
-producer skill 会执行完整部署流程：
-
-1. 安装或定位 `notebooklm` CLI
-2. 引导用户完成 NotebookLM 登录
-3. 启动本地 HTTP Bridge
-4. 使用 auto-domain 获取公网域名
-5. 发布消费者 skill
-6. 输出消费者一键安装命令
-
-## NotebookLM 登录说明
-
-NotebookLM 登录是必须的，因为 Bridge 需要使用部署机器上的 NotebookLM 登录态。
-
-当前使用的是 `notebooklm-py` 的登录逻辑：
-
-```bash
-notebooklm login
-```
-
-它使用 Playwright 管理的 Chromium 浏览器，不是系统默认浏览器。
-
-如果机器上还没有 Playwright Chromium，部署脚本会提示你可以执行类似命令：
-
-```bash
-~/.venvs/notebooklm-py/bin/python -m playwright install chromium
-```
-
-下载完成后，重新让 agent 运行 deploy 即可。当前脚本不会强制自动下载 Chromium。
-
-如果你在 macOS 或 Windows 已经用 Chrome 登录过 Google，也可以让部署脚本走备用登录路径：
-
-```bash
-notebooklm login --browser-cookies chrome
-```
-
-这个方式默认读取 Chrome 的 Default Profile。它不会自动扫描所有 Chrome Profile；如果你有多个 Google 账号，需要确认 Default Profile 对应的账号就是你想给 Bridge 使用的 NotebookLM 账号。
-
-Linux 服务器如果没有桌面环境，需要通过 VNC 完成浏览器登录；macOS 和 Windows 通常会直接弹出本机浏览器窗口。
-
-## 公网域名
-
-部署时会自动启动本地 Bridge，并通过 auto-domain 申请公网域名。
-
-域名不是写死在仓库里的。每台机器部署时会根据运行结果生成自己的公网访问地址。
-
-如果 tunnel 失败，脚本会提示查看：
-
-```bash
-~/.notebooklm-bridge/domain.log
-~/.tunneling/machine-agent/agent.log
-```
-
-本地 Bridge 正常但公网 404 时，通常是 tunnel agent 没连到正确的 gateway，需要按日志提示重启 agent。
-
-## 机器 ID 和发布路径
-
-每台部署机器会生成一个稳定的机器 ID：
-
-```text
-~/.notebooklm-bridge/machine-id
-```
-
-发布产物会带机器 ID，避免多台机器互相覆盖：
-
-```text
-notebooklm-bridge/<machine-id>/<kind>/<name>
-```
-
-示例：
-
-```text
-notebooklm-bridge/nbb-7f3c2a91/domain/current.json
-notebooklm-bridge/nbb-7f3c2a91/release/install-notebooklm-bridge.sh
-notebooklm-bridge/nbb-7f3c2a91/release/notebooklm-bridge.zip
-```
-
-## 消费者怎么使用
-
-producer 部署成功后，会输出消费者安装命令，类似：
+部署成功后输出类似：
 
 ```bash
 bash <(curl -fsSL "https://skill.vyibc.com/notebooklm-bridge/<machine-id>/release/install-notebooklm-bridge.sh?v=$(date +%s)")
 ```
 
-把这个命令发给别人，对方安装后就能通过你的公网 Bridge 调用 NotebookLM。
+把这条命令发给任何想用 NotebookLM 的人即可。
 
-消费者机器不需要自己登录 NotebookLM，也不需要本地部署 Bridge；登录和 Bridge 都在生产者机器上。消费者 skill 包里会内置 `bridge.env`，包含公网 URL 和 `HERMES_WEBHOOK_TOKEN`，所以消费端安装后不需要再手动猜 token。
+---
 
-## 常用命令
+## 消费者：安装 Skill 并使用
 
-重新运行部署：
+### 第一步：安装 Consumer Skill
 
-```bash
-~/.cursor/skills/notebooklm-bridge-release/scripts/deploy.sh
-```
-
-如果已经登录过，只想跳过登录重新检查 Bridge 和公网域名：
+执行生产者给你的安装命令：
 
 ```bash
-~/.cursor/skills/notebooklm-bridge-release/scripts/deploy.sh --skip-login
+bash <(curl -fsSL "https://skill.vyibc.com/notebooklm-bridge/<machine-id>/release/install-notebooklm-bridge.sh?v=$(date +%s)")
 ```
 
-查看本地状态：
+安装到你的 AI 工具（Claude / Cursor 等）。
 
-```bash
-ls ~/.notebooklm-bridge
+### 第二步：直接和 Agent 说话
+
+安装后 skill 已内置公网地址和 token，无需任何配置，直接对 agent 发指令即可。
+
+---
+
+## 消费者使用示例
+
+### 场景一：建立论文研究笔记本
+
+```
+帮我创建一个关于"LLM 微调技术"的 NotebookLM 笔记本，
+添加以下论文作为内容源：
+- https://arxiv.org/abs/2305.11206
+- https://arxiv.org/abs/2106.09685
+- https://arxiv.org/abs/2312.10997
+添加完后告诉我处理状态。
 ```
 
-检查本地 Bridge：
+---
 
-```bash
-curl http://127.0.0.1:18800/health
+### 场景二：深度研究 + 生成脑图
+
+```
+用 notebooklm-bridge，对"LLM 微调技术"笔记本做深度分析，
+生成一张思维导图，完成后把结果保存到我的桌面。
 ```
 
-## 仓库职责
+---
 
-这个仓库主要面向部署机器，也就是 producer。
+### 场景三：生成研究报告
 
-它负责：
+```
+对"LLM 微调技术"笔记本生成一份中文研究报告，
+内容聚焦在 LoRA、QLoRA、RLHF 这几个方向的对比，
+完成后把报告内容输出给我。
+```
 
-- 安装 producer skill
-- 引导 NotebookLM 登录
-- 启动本地 Bridge
-- 获取公网域名
-- 发布 consumer skill
+---
 
-最终分享给别人使用的是 producer 部署成功后生成的 consumer skill 安装命令。
+### 场景四：Agent 协作专题研究
 
-## 部署成功判据
+```
+帮我创建一个关于"Multi-Agent 协作系统"的 NotebookLM 笔记本，
+添加这些内容：
+- https://arxiv.org/abs/2308.08155  （AutoGen 论文）
+- https://arxiv.org/abs/2309.07864  （AgentVerse 论文）
+- https://www.anthropic.com/research/claude-agent
 
-部署脚本不会只依赖 `/health`。完整成功需要同时满足：
+然后让 NotebookLM 回答：这几个框架在任务分配机制上有什么核心差异？
 
-- NotebookLM Auth 检查通过
-- 本地 Bridge `/run` 可以带 token 执行 `list --json`
-- 公网 Bridge `/run` 可以带 token 执行 `list --json`
-- consumer skill 发布成功
+最后生成一张对比脑图和一份闪卡，方便我复习。
+```
 
-如果使用 `--skip-login`，脚本也会先检查 NotebookLM Auth；Auth 不通过时不会继续发布。
+---
+
+### 场景五：生成播客音频
+
+```
+对"LLM 微调技术"笔记本生成一段 Audio Overview（播客风格的内容概览），
+完成后给我下载链接。
+```
+
+---
+
+### 场景六：查看和整理已有笔记本
+
+```
+列出我所有的 NotebookLM 笔记本，
+找出关于"AI Agent"主题的，给我一个简要摘要。
+```
+
+---
+
+## Skill 能力一览
+
+消费者 skill 让 agent 具备以下能力，全部通过自然语言驱动：
+
+| 能力 | 说明 |
+|------|------|
+| 笔记本管理 | 创建、列出、重命名、删除、获取摘要 |
+| 添加内容源 | YouTube 视频、论文链接、网页、Google Drive |
+| AI 对话 | 向笔记本提问、获取对话历史 |
+| 生成产物 | 思维导图、研究报告、测验、闪卡、幻灯片、信息图、音频概览 |
+| 下载产物 | 获取生成内容的下载链接或直接保存到本地 |
+| 笔记管理 | 创建、列出笔记，保存对话为笔记 |
+
+---
+
+## 常见问题
+
+**Q: 消费者需要 NotebookLM 账号吗？**
+不需要。登录态在生产者机器上，消费者只调用公网 Bridge。
+
+**Q: Bridge 断了怎么办？**
+生产者机器会自动重连并保持公网域名不变。如果生产者重新部署，需要重新发消费者安装命令（因为 token 会更新）。
+
+**Q: 支持多个消费者同时使用吗？**
+支持。同一个 token 可以多人共用，任务队列自动管理。
+
+**Q: 跨机器重新部署生产者，消费者需要重新安装吗？**
+如果公网域名和 token 不变，不需要。否则需要重新安装消费者 skill。
