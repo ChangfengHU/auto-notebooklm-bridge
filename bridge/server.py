@@ -157,16 +157,33 @@ def _run_job_background(job: dict) -> None:
         job["status"]     = "running"
         job["started_at"] = time.time()
 
-    # download 命令自动注入输出目录（位置参数 OUTPUT_PATH），确保文件写到 downloads 目录
-    # CLI 用法：notebooklm download audio [OUTPUT_PATH]，OUTPUT_PATH 可以是目录或文件路径
+    # download 命令自动注入 OUTPUT_PATH（完整文件路径，紧跟在子命令后面）
+    # CLI 用法：notebooklm download audio OUTPUT_PATH -n NB -a ARTIFACT_ID
     args = list(job["args"])
-    if args and args[0] == "download":
+    if args and args[0] == "download" and len(args) >= 2:
+        subtype = args[1]
+        # 如果调用方已经提供了路径（含 /），不再注入
         has_output_path = any(
-            a for a in args[1:]
+            a for a in args[2:]
             if not a.startswith("-") and ("/" in a or a.startswith(".") or a.startswith("~"))
         )
         if not has_output_path:
-            args.append(str(DOWNLOADS_DIR) + "/")
+            ext = {
+                "audio":           ".mp3",
+                "video":           ".mp4",
+                "cinematic-video": ".mp4",
+                "report":          ".md",
+                "mind-map":        ".json",
+                "slide-deck":      ".pdf",
+                "flashcards":      ".pdf",
+                "quiz":            ".pdf",
+                "infographic":     ".pdf",
+                "data-table":      ".csv",
+            }.get(subtype, ".bin")
+            filename = f"{subtype}-{int(time.time())}{ext}"
+            output_path = str(DOWNLOADS_DIR / filename)
+            # OUTPUT_PATH 必须紧跟在子命令（audio/video/...）后面，其余参数不动
+            args = [args[0], args[1], output_path] + args[2:]
             with _jobs_lock:
                 job["args"] = args
 
