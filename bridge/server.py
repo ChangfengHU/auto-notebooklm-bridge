@@ -157,12 +157,18 @@ def _run_job_background(job: dict) -> None:
         job["status"]     = "running"
         job["started_at"] = time.time()
 
-    # download 命令自动注入 --output-dir，确保文件写到 downloads 目录
+    # download 命令自动注入输出目录（位置参数 OUTPUT_PATH），确保文件写到 downloads 目录
+    # CLI 用法：notebooklm download audio [OUTPUT_PATH]，OUTPUT_PATH 可以是目录或文件路径
     args = list(job["args"])
-    if args and args[0] == "download" and "--output-dir" not in args and "-o" not in args:
-        args += ["--output-dir", str(DOWNLOADS_DIR)]
-        with _jobs_lock:
-            job["args"] = args
+    if args and args[0] == "download":
+        has_output_path = any(
+            a for a in args[1:]
+            if not a.startswith("-") and ("/" in a or a.startswith(".") or a.startswith("~"))
+        )
+        if not has_output_path:
+            args.append(str(DOWNLOADS_DIR) + "/")
+            with _jobs_lock:
+                job["args"] = args
 
     # 记录执行前 downloads 目录快照，用于发现新增文件
     files_before = set(DOWNLOADS_DIR.iterdir()) if DOWNLOADS_DIR.exists() else set()
