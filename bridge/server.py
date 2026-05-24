@@ -4,12 +4,14 @@ NotebookLM HTTP Bridge
 把 notebooklm CLI 完整透传为 HTTP 接口，远程 agent 像调用本地 CLI 一样使用。
 
 端点：
-  POST /run            同步执行（适合 <60s 的命令）
-  POST /run/async      异步执行，立即返回 job_id
-  GET  /jobs/{job_id}  查询 job 状态/结果
-  GET  /jobs           列出最近 100 个 job
-  DELETE /jobs/{job_id} 取消正在运行的 job
-  GET  /health         健康检查
+  POST /run              同步执行（适合 <60s 的命令）
+  POST /run/async        异步执行，立即返回 job_id
+  GET  /jobs/{job_id}    查询 job 状态/结果
+  GET  /jobs             列出最近 100 个 job
+  DELETE /jobs/{job_id}  取消正在运行的 job
+  GET  /files            列出可下载文件
+  GET  /file/{filename}  下载文件（仅限 downloads 目录）
+  GET  /health           健康检查
 
 认证：所有写操作需要 Header: X-Token: <token>
       token 来自环境变量 NOTEBOOKLM_BRIDGE_TOKEN 或 HERMES_WEBHOOK_TOKEN
@@ -27,7 +29,7 @@ from typing import Optional
 
 import uvicorn
 from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
 # ── 配置 ─────────────────────────────────────────────────────────────────────
@@ -43,6 +45,10 @@ TOKEN = (
 SYNC_TIMEOUT  = int(os.environ.get("NOTEBOOKLM_BRIDGE_SYNC_TIMEOUT", 60))
 MAX_JOBS      = int(os.environ.get("NOTEBOOKLM_BRIDGE_MAX_JOBS", 200))
 OUTPUT_LIMIT  = 512 * 1024  # stdout/stderr 各最多 512KB 存内存
+
+STATE_DIR     = Path(os.environ.get("NOTEBOOKLM_BRIDGE_HOME", Path.home() / ".notebooklm-bridge"))
+DOWNLOADS_DIR = STATE_DIR / "downloads"
+DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def _find_notebooklm() -> str:
@@ -285,10 +291,59 @@ def _job_response(job: dict) -> dict:
     return resp
 
 
+# ── 文件回传 ──────────────────────────────────────────────────────────────────
+
+@app.get("/files")
+def list_files(_: None = Depends(_verify_token)):
+    """列出 downloads 目录中的可下载文件"""
+    files = []
+    for f in sorted(DOWNLOADS_DIR.iterdir()):
+        if f.is_file():
+            files.append({
+                "filename": f.name,
+                "size":     f.stat().st_size,
+                "url":      f"/file/{f.name}",
+            })
+    return {"downloads_dir": str(DOWNLOADS_DIR), "files": files}
+
+
+@app.get("/file/{filename}")
+def download_file(filename: str, _: None = Depends(_verify_token)):
+    """
+    下载 downloads 目录中的文件。
+    只允许访问 ~/.notebooklm-bridge/downloads/ 目录，防止路径穿越。
+
+    用法：先用 /run/async 执行
+      ["download", "audio", ARTIFACT_ID, "-n", NB_ID, "--output-dir", "/home/.../.notebooklm-bridge/downloads"]
+    完成后调用 GET /file/<filename> 取回文件。
+    """
+    # 防止路径穿越
+    safe_path = (DOWNLOADS_DIR / filename).resolve()
+    if not str(safe_path).startswith(str(DOWNLOADS_DIR.resolve())):
+        raise HTTPException(status_code=400, detail="invalid filename")
+    if not safe_path.exists() or not safe_path.is_file():
+        raise HTTPException(status_code=404, detail=f"file not found: {filename}")
+
+    media_type = "application/octet-stream"
+    if filename.endswith(".mp3"):
+        media_type = "audio/mpeg"
+    elif filename.endswith(".mp4"):
+        media_type = "video/mp4"
+    elif filename.endswith(".pdf"):
+        media_type = "application/pdf"
+    elif filename.endswith(".json"):
+        media_type = "application/json"
+    elif filename.endswith(".md"):
+        media_type = "text/markdown"
+
+    return FileResponse(path=safe_path, filename=filename, media_type=media_type)
+
+
 # ── 启动 ──────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
     print(f"[bridge] notebooklm bin: {NOTEBOOKLM_BIN}")
     print(f"[bridge] token auth:     {'enabled' if TOKEN else 'DISABLED (no token set)'}")
+    print(f"[bridge] downloads dir:  {DOWNLOADS_DIR}")
     print(f"[bridge] listening on:   {HOST}:{PORT}")
     uvicorn.run(app, host=HOST, port=PORT, log_level="info")
