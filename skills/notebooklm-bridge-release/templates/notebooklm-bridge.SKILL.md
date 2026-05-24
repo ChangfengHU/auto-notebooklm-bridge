@@ -1,60 +1,67 @@
 ---
 name: notebooklm-bridge
-description: "通过远程 NotebookLM HTTP Bridge 调用 NotebookLM 能力；消费端无需安装 notebooklm，只需配置访问 token。支持笔记本管理、添加内容源、AI 对话、生成产物（脑图/报告/音频/视频）、下载文件到本地。"
+description: "通过远程 NotebookLM HTTP Bridge 调用 NotebookLM 能力。支持笔记本管理、添加内容源（YouTube/论文/网页）、AI 对话、生成产物（脑图/报告/音频/视频/闪卡/测验）。音视频等二进制产物自动上传 R2，job 结果直接返回下载链接，消费端无需登录 NotebookLM。"
 ---
 
 # NotebookLM Bridge
 
-## Connection
+## 连接配置
 
-Read connection values from `bridge.env` in this skill directory:
+skill 目录下的 `bridge.env` 已内置，无需手动配置：
 
-```bash
+```
 NOTEBOOKLM_BRIDGE_URL=__PUBLIC_URL__
 HERMES_WEBHOOK_TOKEN=__HERMES_WEBHOOK_TOKEN__
 ```
 
-All requests require header: `X-Token: $HERMES_WEBHOOK_TOKEN`
+所有请求需要 header：`X-Token: __HERMES_WEBHOOK_TOKEN__`
 
-## Endpoints
+## 接口说明
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/run` | POST | 同步执行（≤60s，适合 list/create/ask 等） |
-| `/run/async` | POST | 异步执行，返回 job_id（适合 generate/download 等耗时命令） |
-| `/jobs/{id}` | GET | 查询 job 状态和结果 |
-| `/files` | GET | 列出远端可下载文件 |
-| `/file/{filename}` | GET | 下载文件到本地（mp3/mp4/pdf 等二进制文件走此接口） |
+| 接口 | 方法 | 说明 |
+|------|------|------|
+| `/run` | POST | 同步执行（≤60s）适合 list/create/ask 等快速命令 |
+| `/run/async` | POST | 异步执行，返回 job_id，适合 generate/download 等耗时命令 |
+| `/jobs/{id}` | GET | 查询 job 状态；download 完成后含 `r2_urls` 直接下载链接 |
 | `/health` | GET | 健康检查（无需 token） |
 
-## Common Commands
+## 文件传输说明
 
-**List notebooks:**
+**音频、视频、PDF 等二进制产物走 R2，不经过隧道：**
+
+1. `/run/async` 执行 `download` 命令
+2. Bridge 自动上传文件到 R2
+3. `GET /jobs/{id}` 结果中包含 `r2_urls: {"filename.mp3": "https://skill.vyibc.com/..."}`
+4. 消费者直接 `curl` R2 地址下载到本地，无大小限制
+
+## 常用命令
+
+**列出笔记本：**
 ```json
 {"args": ["list", "--json"]}
 ```
 
-**Create notebook:**
+**创建笔记本：**
 ```json
 {"args": ["create", "笔记本名称", "--json"]}
 ```
 
-**Add source (YouTube / URL / paper):**
+**添加内容源（YouTube / 论文 / 网页）：**
 ```json
 {"args": ["source", "add", "https://...", "-n", "NB_ID", "--json"]}
 ```
 
-**Wait for source to finish processing:**
+**等待内容源处理完成（/run/async）：**
 ```json
 {"args": ["source", "wait", "SOURCE_ID", "-n", "NB_ID", "--timeout", "300", "--json"]}
 ```
 
-**Ask a question:**
+**向笔记本提问：**
 ```json
 {"args": ["ask", "核心观点是什么？", "-n", "NB_ID", "--json"]}
 ```
 
-**Generate artifacts (use /run/async):**
+**生成产物（均用 /run/async）：**
 ```json
 {"args": ["generate", "mind-map",   "-n", "NB_ID", "--json"]}
 {"args": ["generate", "report",     "-n", "NB_ID", "--language", "zh_Hans", "--json"]}
@@ -64,50 +71,43 @@ All requests require header: `X-Token: $HERMES_WEBHOOK_TOKEN`
 {"args": ["generate", "slide-deck", "-n", "NB_ID", "--json"]}
 ```
 
-**Wait for artifact generation (use /run/async):**
+**等待产物生成完成（/run/async）：**
 ```json
 {"args": ["artifact", "wait", "ARTIFACT_ID", "-n", "NB_ID", "--timeout", "900", "--json"]}
 ```
 
-**Download binary file (mp3/mp4/pdf) to remote downloads dir:**
+**下载音频/视频到本地（完整流程）：**
 ```json
-{"args": ["download", "audio", "ARTIFACT_ID", "-n", "NB_ID",
-          "--output-dir", "/home/USER/.notebooklm-bridge/downloads", "--json"]}
+// Step 1: 提交 download 任务（Bridge 自动补 --output-dir）
+{"args": ["download", "audio", "ARTIFACT_ID", "-n", "NB_ID", "--json"]}
+
+// Step 2: 轮询 GET /jobs/{job_id}，done 后结果含：
+// {"r2_urls": {"podcast.mp3": "https://skill.vyibc.com/notebooklm/downloads/podcast.mp3"}}
+
+// Step 3: 消费者直接下载
+// curl "https://skill.vyibc.com/notebooklm/downloads/podcast.mp3" -o ~/Desktop/podcast.mp3
 ```
 
-**Then fetch file to local machine:**
-```bash
-curl "$NOTEBOOKLM_BRIDGE_URL/file/FILENAME" \
-  -H "X-Token: $HERMES_WEBHOOK_TOKEN" \
-  -o ~/Desktop/FILENAME
+## 完整示例：从添加论文到下载音频
+
+```
+用户说：帮我创建关于 LoRA 微调的笔记本，添加论文，生成中文播客音频，下载到桌面
+
+Agent 执行步骤：
+1. POST /run     {"args": ["create", "LoRA微调研究", "--json"]}
+2. POST /run     {"args": ["source", "add", "https://arxiv.org/abs/2106.09685", "-n", "NB_ID", "--json"]}
+3. POST /run/async {"args": ["source", "wait", "SRC_ID", "-n", "NB_ID", "--timeout", "300"]}
+4. POST /run/async {"args": ["generate", "audio", "-n", "NB_ID", "--json"]}
+   → 轮询直到 done，拿到 ARTIFACT_ID
+5. POST /run/async {"args": ["artifact", "wait", "ARTIFACT_ID", "-n", "NB_ID", "--timeout", "900"]}
+6. POST /run/async {"args": ["download", "audio", "ARTIFACT_ID", "-n", "NB_ID", "--json"]}
+   → 轮询 done，结果含 r2_urls: {"lora-podcast.mp3": "https://skill.vyibc.com/..."}
+7. curl R2 URL -o ~/Desktop/lora-podcast.mp3
 ```
 
-## Full Flow: Download Audio to Desktop
+## 注意事项
 
-```bash
-# 1. Generate audio (async)
-JOB=$(curl -s -X POST "$BRIDGE/run/async" -H "X-Token: $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"args":["generate","audio","-n","NB_ID","--json"]}')
-JOB_ID=$(echo $JOB | python3 -c "import json,sys; print(json.load(sys.stdin)['job_id'])")
-
-# 2. Poll until done, get artifact_id
-# 3. Download to remote downloads dir (async)
-curl -s -X POST "$BRIDGE/run/async" -H "X-Token: $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d "{\"args\":[\"download\",\"audio\",\"ARTIFACT_ID\",\"-n\",\"NB_ID\",
-      \"--output-dir\",\"/home/USER/.notebooklm-bridge/downloads\",\"--json\"]}"
-
-# 4. List files to get filename
-curl -s "$BRIDGE/files" -H "X-Token: $TOKEN"
-
-# 5. Download file to local desktop
-curl -s "$BRIDGE/file/FILENAME" -H "X-Token: $TOKEN" -o ~/Desktop/FILENAME
-```
-
-## Notes
-
-- Consumers do NOT need a NotebookLM account or Google login — auth lives on the producer machine.
-- Use `/run` for fast commands (list, create, ask, source add). Use `/run/async` + poll for slow commands (generate, download).
-- Binary files (mp3, mp4, pdf) must be downloaded via `GET /file/{filename}`, not via stdout.
-- Downloads dir on producer: `~/.notebooklm-bridge/downloads/`
+- 消费者**无需** NotebookLM 账号或 Google 登录，认证在生产者机器上
+- 快速命令用 `/run`，耗时命令用 `/run/async` + 轮询 `/jobs/{id}`
+- 所有命令加 `--json` 获得结构化输出
+- `-n NB_ID` 指定笔记本 ID（从 list 命令获取）
