@@ -1,0 +1,43 @@
+name: Publish release skill
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "skills/notebooklm-bridge-release/**"
+      - "templates/install-skill.sh"
+      - "scripts/upload-file.sh"
+      - "scripts/publish-release-skill.sh"
+      - ".github/workflows/publish-release-skill.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: publish-notebooklm-bridge-release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install tools
+        run: sudo apt-get update && sudo apt-get install -y zip python3 curl
+
+      - name: Publish notebooklm-bridge-release
+        env:
+          UPLOAD_R2_TOKEN: ${{ secrets.UPLOAD_R2_TOKEN }}
+          UPLOAD_R2_URL: ${{ vars.UPLOAD_R2_URL }}
+          UPLOAD_R2_DOMAIN: ${{ vars.UPLOAD_R2_DOMAIN }}
+        run: ./scripts/publish-release-skill.sh
+
+      - name: Verify installer points to a release zip
+        run: |
+          set -euo pipefail
+          installer="$(curl -fsSL "https://skill.vyibc.com/install-notebooklm-bridge-release.sh?v=$(date +%s)")"
+          printf '%s\n' "$installer" | grep -q 'notebooklm-bridge/release/notebooklm-bridge-release-'
+          printf '%s\n' "$installer" | grep -q 'ZIP_URL='
