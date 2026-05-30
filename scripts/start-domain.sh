@@ -43,7 +43,12 @@ BRIDGE_TOKEN=$(grep "NOTEBOOKLM_BRIDGE_TOKEN=" "$STATE_DIR/env" 2>/dev/null | cu
 INSTALL_CMD="bash <(curl -fsSL https://skill.vyibc.com/notebooklm-bridge/${MACHINE_ID}/release/install-notebooklm-bridge.sh)"
 TEST_CMD="curl --location 'https://${DOMAIN_NAME}.chxyka.ccwu.cc/run' --header 'X-Token: ${BRIDGE_TOKEN}' --header 'Content-Type: application/json' --data '{\"args\": [\"list\", \"--json\"]}'"
 
-METADATA="{\"title\":\"NotebookLM Bridge\",\"install_command\":\"$INSTALL_CMD\",\"test_command\":\"$TEST_CMD\"}"
+# 使用 Node.js 安全地生成 JSON 字符串，避免 Bash 转义地狱
+METADATA=$(INSTALL_CMD="$INSTALL_CMD" TEST_CMD="$TEST_CMD" node -e "console.log(JSON.stringify({
+  title: 'NotebookLM Bridge',
+  install_command: process.env.INSTALL_CMD,
+  test_command: process.env.TEST_CMD
+}))")
 
 if [[ "$FOREGROUND" == "1" ]]; then
   "$AUTO_DOMAIN" "$PORT" "$DOMAIN_NAME" --metadata="$METADATA" | tee "$DOMAIN_LOG"
