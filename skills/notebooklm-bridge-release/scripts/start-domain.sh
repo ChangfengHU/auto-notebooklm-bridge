@@ -25,23 +25,28 @@ if command -v taskkill >/dev/null 2>&1; then
   taskkill //F //IM machine-agent.exe >/dev/null 2>&1 || true
 fi
 
-if [[ ! -x "$ROOT_DIR/vendor/auto-domain/run.sh" && -x "$HOME/.codex/skills/auto-domain/scripts/run.sh" ]]; then
-  AUTO_DOMAIN="$HOME/.codex/skills/auto-domain/scripts/run.sh"
-else
-  AUTO_DOMAIN="$ROOT_DIR/vendor/auto-domain/run.sh"
+if [[ -f "$HOME/.auto-domain/config" ]]; then
+  # shellcheck disable=SC1090
+  source "$HOME/.auto-domain/config" 2>/dev/null || true
 fi
 
-if [[ ! -x "$AUTO_DOMAIN" ]]; then
-  echo "auto-domain skill is required. Install it before running release." >&2
-  exit 1
+AUTO_DOMAIN_URL="${AUTO_DOMAIN_URL:-https://skill.vyibc.com/auto-domain.sh}"
+AUTO_DOMAIN_ARGS=(
+  "--port=$PORT"
+  "--name=$DOMAIN_NAME"
+  "--daemon"
+  "--replace"
+)
+if [[ -n "${AUTO_DOMAIN_TOKEN:-}" ]]; then
+  AUTO_DOMAIN_ARGS+=("--token=$AUTO_DOMAIN_TOKEN")
 fi
 
 if [[ "$FOREGROUND" == "1" ]]; then
-  "$AUTO_DOMAIN" "$PORT" "$DOMAIN_NAME" | tee "$DOMAIN_LOG"
+  bash <(curl -fsSL "$AUTO_DOMAIN_URL") "${AUTO_DOMAIN_ARGS[@]}" | tee "$DOMAIN_LOG"
   exit 0
 fi
 
-nohup "$AUTO_DOMAIN" "$PORT" "$DOMAIN_NAME" >"$DOMAIN_LOG" 2>&1 &
+setsid bash -c 'bash <(curl -fsSL "$1") "${@:2}"' _ "$AUTO_DOMAIN_URL" "${AUTO_DOMAIN_ARGS[@]}" >"$DOMAIN_LOG" 2>&1 < /dev/null &
 echo $! > "$PID_FILE"
 echo "DOMAIN_PID=$(cat "$PID_FILE")"
 echo "DOMAIN_LOG=$DOMAIN_LOG"

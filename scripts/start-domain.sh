@@ -35,11 +35,18 @@ if [[ ! -x "$AUTO_DOMAIN" ]]; then
   exit 1
 fi
 
+# 准备元数据：包含安装命令和健康检查命令
+MACHINE_ID="$("$ROOT_DIR/scripts/machine-id.sh")"
+TEST_CMD="curl -fsSL https://${DOMAIN_NAME}.chxyka.ccwu.cc/health"
+INSTALL_CMD="bash <(curl -fsSL https://skill.vyibc.com/notebooklm-bridge/${MACHINE_ID}/release/install-notebooklm-bridge.sh)"
+
+METADATA="{\"title\":\"NotebookLM Bridge\",\"install_command\":\"$INSTALL_CMD\",\"test_command\":\"$TEST_CMD\"}"
+
 if [[ "$FOREGROUND" == "1" ]]; then
-  "$AUTO_DOMAIN" "$PORT" "$DOMAIN_NAME" | tee "$DOMAIN_LOG"
+  "$AUTO_DOMAIN" "$PORT" "$DOMAIN_NAME" --metadata="$METADATA" | tee "$DOMAIN_LOG"
   exit 0
 fi
 
 # 后台守护模式：等待隧道上线并打印公网 URL
-"$AUTO_DOMAIN" "$PORT" "$DOMAIN_NAME" --daemon
+"$AUTO_DOMAIN" "$PORT" "$DOMAIN_NAME" --metadata="$METADATA" --daemon
 

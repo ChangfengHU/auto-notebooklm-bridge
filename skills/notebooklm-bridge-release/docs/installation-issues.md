@@ -99,8 +99,14 @@ const doStub = env.TUNNEL_DO.get(env.TUNNEL_DO.idFromName(subdomain));
 - `scripts/sync-auth.sh`：验证 auth 有效后上传 `storage_state.json` 到 R2
 - `scripts/download-auth.sh`：从 R2 下载并验证，写入本地 profile
 - `start-bridge.sh`：启动时立即同步一次，之后每 30 分钟同步
-- `deploy.sh`：部署前自动尝试从 R2 恢复 auth，成功则跳过 VNC 登录
+- `deploy.sh`：部署前先验证本地 auth；本地无效才从 R2 恢复 auth，成功则跳过 VNC 登录
 - R2 地址：`https://skill.vyibc.com/notebooklm/storage_state.json`
+
+**Bridge token 规则：**
+- `start-bridge.sh` 只在 `~/.notebooklm-bridge/env` 缺少 token 时生成新 token
+- consumer skill 发布时会把当前 token 写入 `bridge.env`
+- 不要为排障临时改 token；如确实轮换 token，必须重新运行 `publish-consumer-skill.sh` 并让消费者重新安装 skill
+- 重启 bridge / domain 不应改变 `NOTEBOOKLM_BRIDGE_TOKEN` 或 `HERMES_WEBHOOK_TOKEN`
 
 ---
 
@@ -120,9 +126,10 @@ const doStub = env.TUNNEL_DO.get(env.TUNNEL_DO.idFromName(subdomain));
 - [ ] 部署 Worker 时 export `CLOUDFLARE_ACCOUNT_ID=9dee73ebf489bc2d507f7a3991c2c401`
 - [ ] 系统已安装 `zip`、`Xvfb`、`x11vnc`、`websockify`
 - [ ] config.env 中 token 配置正确（auto-domain、R2、TG）
-- [ ] 首次部署自动从 R2 下载 auth → 无需 VNC
+- [ ] 首次部署先复用本地 auth；本地无效再从 R2 下载 auth → 无需 VNC
 - [ ] 如 R2 auth 过期 → 自动走 VNC 流程（7080 端口）
 - [ ] Bridge 运行后每 30 分钟自动同步 auth 到 R2
+- [ ] consumer skill 中的 `bridge.env` token 与生产端 `~/.notebooklm-bridge/env` 一致
 
 ---
 

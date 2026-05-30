@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-exec bash <(curl -fsSL https://skill.vyibc.com/auto-domain.sh) "$@"
+exec bash /root/.auto-domain/local-runner.sh "$@"
 

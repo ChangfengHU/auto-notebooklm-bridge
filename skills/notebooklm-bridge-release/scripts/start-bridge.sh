@@ -69,7 +69,7 @@ if [[ -f "$PID_FILE" ]]; then
     sleep 1
   fi
 fi
-NOTEBOOKLM_BRIDGE_PORT="$PORT" PYTHON="$BRIDGE_PYTHON" nohup "$ROOT_DIR/bridge/start.sh" >"$LOG_FILE" 2>&1 &
+setsid bash -c 'NOTEBOOKLM_BRIDGE_PORT="$1" PYTHON="$2" exec "$3" >>"$4" 2>&1' _ "$PORT" "$BRIDGE_PYTHON" "$ROOT_DIR/bridge/start.sh" "$LOG_FILE" < /dev/null &
 echo $! > "$PID_FILE"
 
 sleep 2
