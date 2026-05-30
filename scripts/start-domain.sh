@@ -37,8 +37,11 @@ fi
 
 # 准备元数据：包含安装命令和健康检查命令
 MACHINE_ID="$("$ROOT_DIR/scripts/machine-id.sh")"
-TEST_CMD="curl -fsSL https://${DOMAIN_NAME}.chxyka.ccwu.cc/health"
+# 获取业务 Token 用于功能测试
+BRIDGE_TOKEN=$(grep "NOTEBOOKLM_BRIDGE_TOKEN=" "$STATE_DIR/env" 2>/dev/null | cut -d'=' -f2 || echo "YOUR_TOKEN")
+
 INSTALL_CMD="bash <(curl -fsSL https://skill.vyibc.com/notebooklm-bridge/${MACHINE_ID}/release/install-notebooklm-bridge.sh)"
+TEST_CMD="curl --location 'https://${DOMAIN_NAME}.chxyka.ccwu.cc/run' --header 'X-Token: ${BRIDGE_TOKEN}' --header 'Content-Type: application/json' --data '{\"args\": [\"list\", \"--json\"]}'"
 
 METADATA="{\"title\":\"NotebookLM Bridge\",\"install_command\":\"$INSTALL_CMD\",\"test_command\":\"$TEST_CMD\"}"
 
